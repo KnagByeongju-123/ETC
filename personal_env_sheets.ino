@@ -35,7 +35,7 @@ const WifiAP WIFI_APS[] = {
 #define SHT_SCL 22
 
 const char* GS_URL      = "https://script.google.com/macros/s/AKfycbyYKR2Y9cmL7dLpLq-J7jokkn6tvN9k-47A_N6ZaE7qLd9ctaGL--3Yp1rtBz0g0RS2dQ/exec";  // 모든 보드 동일 (시트 1개 공유)
-const char* DEVICE_NAME = "20260630";                // ★ 보드마다 다르게 (예: 안방, 거실, 창고)
+const char* DEVICE_NAME = "보드명";                // ★ 보드마다 다르게 (예: 안방, 거실, 창고)
 
 const unsigned long SEND_INTERVAL = 3600000; // 1시간 전송
 const unsigned long DISP_INTERVAL = 2000;    // 2초 화면 갱신
