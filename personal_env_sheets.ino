@@ -8,10 +8,16 @@
  *  배선: SHT41  VIN->3.3V(5V 금지) / GND / SDA->GPIO21 / SCL->GPIO22
  *  IDE : ESP32 core 2.0.17, 보드 "ESP32 Dev Module", 업로드 속도 115200
  *
- *  ▼▼ 아래 WiFi 2곳만 본인 환경으로 수정 ▼▼
+ *  ▼▼ 아래 WiFi 목록을 본인 환경으로 수정 (여러 개 가능, 신호 강한 곳에 자동 접속) ▼▼
+ *     개방망(비번 없음)은 비번을 "" 로 두세요.
  */
-#define WIFI_SSID  "여기에_WiFi이름"
-#define WIFI_PASS  "여기에_WiFi비번"
+struct WifiAP { const char* ssid; const char* pass; };
+const WifiAP WIFI_APS[] = {
+  { "여기에_WiFi이름1", "여기에_WiFi비번1" },
+  { "여기에_WiFi이름2", "여기에_WiFi비번2" },
+  // { "개방망예시",      "" },
+  // 필요한 만큼 줄 추가
+};
 //  ▲▲ 여기까지 ▲▲
 
 #include <Wire.h>
@@ -156,7 +162,9 @@ void setup() {
   }
 
   WiFi.mode(WIFI_STA);
-  wifiMulti.addAP(WIFI_SSID, WIFI_PASS);
+  for (uint8_t i = 0; i < sizeof(WIFI_APS) / sizeof(WIFI_APS[0]); i++) {
+    wifiMulti.addAP(WIFI_APS[i].ssid, WIFI_APS[i].pass);
+  }
   configTime(9 * 3600, 0, "pool.ntp.org", "time.google.com");
 
   readSensor();                // 부팅 즉시 1회 측정/표시
