@@ -13,8 +13,9 @@
  */
 struct WifiAP { const char* ssid; const char* pass; };
 const WifiAP WIFI_APS[] = {
-  { "여기에_WiFi이름1", "여기에_WiFi비번1" },
-  { "여기에_WiFi이름2", "여기에_WiFi비번2" },
+  { "taejin-A", "taejinpress" },
+  { "yun2016", "lyhljs5581@" },
+  { "TAEJIN", "taejinpress" }
   // { "개방망예시",      "" },
   // 필요한 만큼 줄 추가
 };
@@ -33,8 +34,8 @@ const WifiAP WIFI_APS[] = {
 #define SHT_SDA 21
 #define SHT_SCL 22
 
-const char* GS_URL      = "여기에_웹앱_URL_붙여넣기";  // 모든 보드 동일 (시트 1개 공유)
-const char* DEVICE_NAME = "온습도계1";                // ★ 보드마다 다르게 (예: 안방, 거실, 창고)
+const char* GS_URL      = "https://script.google.com/macros/s/AKfycbyYKR2Y9cmL7dLpLq-J7jokkn6tvN9k-47A_N6ZaE7qLd9ctaGL--3Yp1rtBz0g0RS2dQ/exec";  // 모든 보드 동일 (시트 1개 공유)
+const char* DEVICE_NAME = "20260630";                // ★ 보드마다 다르게 (예: 안방, 거실, 창고)
 
 const unsigned long SEND_INTERVAL = 3600000; // 1시간 전송
 const unsigned long DISP_INTERVAL = 2000;    // 2초 화면 갱신
