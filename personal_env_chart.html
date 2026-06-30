@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>온습도관리 v4.5</title>
+<title>온습도관리 v4.7</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
   :root{--bg:#0e1116;--panel:#161b22;--line:#262d36;--ink:#e6edf3;--muted:#8b949e;--temp:#f5b945;--humi:#3bc4f2;--feel:#e6edf3;--ok:#3fb950;--off:#6e7681}
@@ -42,6 +42,11 @@
   .rng button.on{background:#21262d;color:var(--ink)}
   .empty{color:var(--muted);text-align:center;padding:24px}
   .dl{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+  .crow{display:flex;align-items:center;gap:8px;margin-top:6px;flex-wrap:wrap}
+  .crow .cn{min-width:80px;font-weight:600}
+  .crow label{color:var(--muted);font-size:12px}
+  .crow input{width:74px;flex:0 0 auto}
+  .crow .btn.rs{padding:6px 10px}
   footer{text-align:center;color:var(--muted);font-size:12px;margin-top:16px}
   .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#21262d;border:1px solid var(--line);padding:9px 16px;border-radius:20px;font-size:13px;opacity:0;transition:.2s;pointer-events:none}
   .toast.on{opacity:1}
@@ -58,7 +63,7 @@
 </style>
 </head>
 <body>
-<header><h1>온습도관리</h1><span class="ver">v4.5</span><span class="clock" id="clock">--:--</span></header>
+<header><h1>온습도관리</h1><span class="ver">v4.7</span><span class="clock" id="clock">--:--</span></header>
 <div class="wrap">
 
   <div class="panel">
@@ -70,6 +75,12 @@
       <button class="btn" onclick="load()">불러오기</button>
     </div>
     <div class="sub" id="status">웹앱 URL을 여러 개 등록할 수 있습니다. 각 시트의 기기들이 기기명으로 자동 합쳐져 표시됩니다.</div>
+  </div>
+
+  <div class="panel">
+    <h2>보정 (offset) <span style="margin-left:auto;font-weight:400;color:var(--muted);font-size:12px">기준계와의 차이를 입력</span></h2>
+    <div id="callist"><div class="sub" style="margin:0">기기를 불러오면 여기에 표시됩니다.</div></div>
+    <div class="sub">측정값에 더할 보정값입니다(예: 실제보다 0.5℃ 낮게 나오면 0.5 입력). 화면·차트·다운로드에 적용되며, 시트 원본은 그대로 보관됩니다.</div>
   </div>
 
   <div class="cards" id="cards"></div>
@@ -89,7 +100,7 @@
     </div>
   </div>
 
-  <footer>온습도관리 · 구글시트(다중 URL 통합) · v4.5</footer>
+  <footer>온습도관리 · 구글시트(다중 URL 통합) · v4.7</footer>
 </div>
 <div class="toast" id="toast"></div>
 
@@ -105,7 +116,54 @@ const DEFAULT_URLS = [
 const LS='gsurls_v1';
 let URLS=[];         // 웹앱 URL 목록
 let BY={};           // 기기명 -> rows(시간오름차순)
-let NAMES=[], SEL=null, RANGE=24, chart=null;
+let NAMES=[], SEL=null, RANGE=24, chart=null, SRC={};
+const CALLS='env_cal_v1';
+let CAL={};
+try{CAL=JSON.parse(localStorage.getItem(CALLS)||'{}');}catch(e){CAL={};}
+function saveCal(){localStorage.setItem(CALLS,JSON.stringify(CAL));}
+function getCal(n){const c=CAL[n]||{};return {t:parseFloat(c.t)||0,h:parseFloat(c.h)||0};}
+function pushCal(n){
+  const u=SRC[n]||URLS[0]; if(!u)return;
+  const c=getCal(n);
+  jsonp(u,'action=setcal&name='+encodeURIComponent(n)+'&t='+c.t+'&h='+c.h)
+    .then(r=>toast(r&&r.ok?'보정 저장됨':'서버 저장 실패(로컬만)'))
+    .catch(()=>toast('서버 저장 실패(로컬만)'));
+}
+function setCal(n,k,v){CAL[n]=CAL[n]||{};CAL[n][k]=parseFloat(v)||0;saveCal();render();pushCal(n);}
+function resetCal(n){CAL[n]={t:0,h:0};saveCal();render();pushCal(n);}
+function r2(x){return Math.round(x*100)/100;}
+function heatIndexC(Tc,R){
+  const T=Tc*1.8+32.0; let HI;
+  if(T<80.0){HI=0.5*(T+61.0+(T-68.0)*1.2+R*0.094);}
+  else{
+    HI=-42.379+2.04901523*T+10.14333127*R-0.22475541*T*R-0.00683783*T*T
+       -0.05481717*R*R+0.00122874*T*T*R+0.00085282*T*R*R-0.00000199*T*T*R*R;
+    if(R<13&&T>=80&&T<=112)HI-=((13.0-R)/4.0)*Math.sqrt((17.0-Math.abs(T-95.0))/17.0);
+    else if(R>85&&T>=80&&T<=87)HI+=((R-85.0)/10.0)*((87.0-T)/5.0);
+  }
+  return (HI-32.0)/1.8;
+}
+function corr(n,row){
+  const o=getCal(n);
+  if(!o.t&&!o.h)return row;                 // 보정 없으면 원본 그대로
+  let t=(row.t===''||row.t==null)?null:Number(row.t)+o.t;
+  let h=(row.h===''||row.h==null)?null:Number(row.h)+o.h;
+  let f;
+  if(t!=null&&h!=null){h=Math.max(0,Math.min(100,h));f=heatIndexC(t,h);}
+  else f=(row.f===''||row.f==null)?null:Number(row.f)+o.t;
+  return {ts:row.ts,name:n,t:t==null?null:r2(t),h:h==null?null:r2(h),f:f==null?null:r2(f)};
+}
+function renderCal(){
+  const box=document.getElementById('callist');
+  if(!NAMES.length){box.innerHTML='<div class="sub" style="margin:0">기기를 불러오면 여기에 표시됩니다.</div>';return;}
+  box.innerHTML=NAMES.map(n=>{
+    const o=getCal(n);const e=n.replace(/'/g,"\\'");
+    return `<div class="crow"><span class="cn">${n}</span>`
+      +`<label>온도</label><input type="number" step="0.1" value="${o.t}" onchange="setCal('${e}','t',this.value)">`
+      +`<label>습도</label><input type="number" step="0.1" value="${o.h}" onchange="setCal('${e}','h',this.value)">`
+      +`<button class="btn rs" onclick="resetCal('${e}')">0</button></div>`;
+  }).join('');
+}
 
 function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('on');setTimeout(()=>t.classList.remove('on'),1500);}
 function clock(){return new Intl.DateTimeFormat('ko-KR',{hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date());}
@@ -137,14 +195,14 @@ function addUrl(){
 function editUrl(i,v){const u=norm(v);if(u){URLS[i]=u;saveUrls();load();}}
 function delUrl(i){URLS.splice(i,1);saveUrls();renderUrls();load();toast('삭제됨');}
 
-function jsonp(url){
+function jsonp(url,query){
   return new Promise((resolve)=>{
     const cb='__cb_'+Math.random().toString(36).slice(2);
     const s=document.createElement('script');let done=false;
     function clean(){try{delete window[cb];}catch(e){}s.remove();}
-    window[cb]=function(res){done=true;resolve((res&&res.rows)||[]);clean();};
+    window[cb]=function(res){done=true;resolve(res||null);clean();};
     s.onerror=function(){if(!done){clean();resolve(null);}}; // 실패시 null
-    s.src=norm(url)+'?action=data&n=5000&callback='+cb;
+    s.src=norm(url)+'?'+query+'&callback='+cb;
     document.body.appendChild(s);
     setTimeout(()=>{if(!done){clean();resolve(null);}},15000);
   });
@@ -152,9 +210,17 @@ function jsonp(url){
 async function load(){
   if(!URLS.length){BY={};NAMES=[];render();status('등록된 URL이 없습니다.');return;}
   status('불러오는 중… ('+URLS.length+'개 URL)');
-  const results=await Promise.all(URLS.map(u=>jsonp(u)));
-  let all=[],fail=0;
-  results.forEach(r=>{ if(r===null)fail++; else all=all.concat(r); });
+  const per=await Promise.all(URLS.map(async u=>{
+    const [d,c]=await Promise.all([jsonp(u,'action=data&n=5000'), jsonp(u,'action=cal')]);
+    return {u, rows:(d&&d.rows)||(d===null?null:[]), cal:(c&&c.cal)||{}};
+  }));
+  let all=[],fail=0; SRC={};
+  per.forEach(p=>{
+    if(p.rows===null){fail++;}
+    else { all=all.concat(p.rows); p.rows.forEach(r=>{const n=r.name||'(이름없음)';SRC[n]=p.u;}); }
+    Object.keys(p.cal).forEach(n=>{ CAL[n]=p.cal[n]; if(!SRC[n])SRC[n]=p.u; });
+  });
+  saveCal();                       // 서버값을 로컬에도 캐시
   group(all);render();
   status('기기 '+NAMES.length+'대 · '+all.length+'건'+(fail?(' · 실패 '+fail+'개 URL'):'')+' · '+clock());
 }
@@ -176,12 +242,12 @@ function group(all){
 function latest(rows){return rows&&rows.length?rows[rows.length-1]:null;}
 function online(rows){const l=latest(rows);if(!l)return false;const d=parseTs(l.ts);return d&&(Date.now()-d.getTime())<2*3600*1000;}
 
-function render(){renderCards();renderPicker();renderChart();}
+function render(){renderCal();renderCards();renderPicker();renderChart();}
 function renderCards(){
   const box=document.getElementById('cards');
   if(!NAMES.length){box.innerHTML='<div class="empty">데이터가 없습니다. (URL 등록 후 보드가 전송하면 자동 표시)</div>';return;}
   box.innerHTML=NAMES.map(n=>{
-    const rows=BY[n];const l=latest(rows);const on=online(rows);
+    const rows=BY[n];const l0=latest(rows);const on=online(rows);const l=l0?corr(n,l0):null;
     const v=(x,u)=>(l&&l[x]!=null)?(l[x]+'<span class="u">'+u+'</span>'):'--';
     return `<div class="card">
       <div class="nm"><span class="nr"><span class="sdot" style="background:${on?'var(--ok)':'var(--off)'}"></span>${n}</span><span class="t">${l?String(l.ts).slice(5,16):'-'}</span></div>
@@ -203,11 +269,12 @@ function renderChart(){
   if(!rows||!rows.length){if(chart){chart.destroy();chart=null;}return;}
   let r=rows;
   if(RANGE>0){const cut=Date.now()-RANGE*3600*1000;r=rows.filter(x=>{const d=parseTs(x.ts);return d&&d.getTime()>=cut;});if(!r.length)r=rows.slice(-2);}
-  const labels=r.map(x=>String(x.ts).slice(5,16));
+  const rc=r.map(x=>corr(SEL,x));
+  const labels=rc.map(x=>String(x.ts).slice(5,16));
   const data={labels,datasets:[
-    {label:'온도 ℃',data:r.map(x=>x.t),borderColor:'#f5b945',borderWidth:2,pointRadius:0,tension:.35,yAxisID:'y'},
-    {label:'체감 ℃',data:r.map(x=>x.f),borderColor:'#e6edf3',borderWidth:1.4,pointRadius:0,tension:.35,yAxisID:'y'},
-    {label:'습도 %',data:r.map(x=>x.h),borderColor:'#3bc4f2',borderWidth:2,pointRadius:0,tension:.35,yAxisID:'y1'}]};
+    {label:'온도 ℃',data:rc.map(x=>x.t),borderColor:'#f5b945',borderWidth:2,pointRadius:0,tension:.35,yAxisID:'y'},
+    {label:'체감 ℃',data:rc.map(x=>x.f),borderColor:'#e6edf3',borderWidth:1.4,pointRadius:0,tension:.35,yAxisID:'y'},
+    {label:'습도 %',data:rc.map(x=>x.h),borderColor:'#3bc4f2',borderWidth:2,pointRadius:0,tension:.35,yAxisID:'y1'}]};
   const opts={responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
     plugins:{legend:{labels:{color:'#8b949e',boxWidth:14,font:{size:11}}}},
     scales:{x:{ticks:{color:'#8b949e',maxTicksLimit:8,font:{size:10}},grid:{color:'#21262d'}},
@@ -222,7 +289,8 @@ function downloadCSV(all){
   let names = all ? NAMES.slice() : (SEL?[SEL]:[]);
   if(!names.length){toast('데이터가 없습니다');return;}
   const lines=['측정시각,기기명,온도(℃),습도(%),체감(℃)'];
-  names.forEach(n=>{(BY[n]||[]).forEach(r=>{
+  names.forEach(n=>{(BY[n]||[]).forEach(r0=>{
+    const r=corr(n,r0);
     lines.push([r.ts,n,r.t,r.h,r.f].map(csvCell).join(','));
   });});
   const blob=new Blob(['\ufeff'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'});
