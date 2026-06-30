@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>온습도관리 v4.3</title>
+<title>온습도관리 v4.5</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
   :root{--bg:#0e1116;--panel:#161b22;--line:#262d36;--ink:#e6edf3;--muted:#8b949e;--temp:#f5b945;--humi:#3bc4f2;--feel:#e6edf3;--ok:#3fb950;--off:#6e7681}
@@ -45,10 +45,20 @@
   footer{text-align:center;color:var(--muted);font-size:12px;margin-top:16px}
   .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#21262d;border:1px solid var(--line);padding:9px 16px;border-radius:20px;font-size:13px;opacity:0;transition:.2s;pointer-events:none}
   .toast.on{opacity:1}
+  /* 모바일: 좁은 폭에서 값 겹침/넘침 방지 */
+  @media (max-width:520px){
+    .card{padding:10px 12px;gap:8px}
+    .card .nm{min-width:64px;font-size:13px}
+    .card .vals{gap:4px}
+    .card .v .n{font-size:17px}
+    .card .v .u{font-size:10px}
+    .card .v .lab{font-size:10px}
+  }
+  html,body{max-width:100%;overflow-x:hidden}
 </style>
 </head>
 <body>
-<header><h1>온습도관리</h1><span class="ver">v4.3</span><span class="clock" id="clock">--:--</span></header>
+<header><h1>온습도관리</h1><span class="ver">v4.5</span><span class="clock" id="clock">--:--</span></header>
 <div class="wrap">
 
   <div class="panel">
@@ -79,11 +89,19 @@
     </div>
   </div>
 
-  <footer>온습도관리 · 구글시트(다중 URL 통합) · v4.3</footer>
+  <footer>온습도관리 · 구글시트(다중 URL 통합) · v4.5</footer>
 </div>
 <div class="toast" id="toast"></div>
 
 <script>
+// ▼▼▼ 배포 URL 등록란 ▼▼▼
+//  여기에 웹앱 URL을 넣어두면 어느 기기/PC에서 열어도 자동 등록됩니다.
+//  (GitHub Pages 등에 올릴 때 유용 · 여러 개 가능)
+const DEFAULT_URLS = [
+  // "https://script.google.com/macros/s/AKfycby...여기에_전체_URL.../exec",
+];
+// ▲▲▲ 여기까지 ▲▲▲
+
 const LS='gsurls_v1';
 let URLS=[];         // 웹앱 URL 목록
 let BY={};           // 기기명 -> rows(시간오름차순)
@@ -97,7 +115,9 @@ function status(m){document.getElementById('status').textContent=m;}
 
 function loadUrls(){
   try{URLS=JSON.parse(localStorage.getItem(LS)||'[]');}catch(e){URLS=[];}
-  if(!URLS.length){const old=localStorage.getItem('gsurl');if(old){URLS=[old];saveUrls();}}
+  if(!URLS.length){const old=localStorage.getItem('gsurl');if(old)URLS=[old];}
+  if(!URLS.length){URLS=DEFAULT_URLS.filter(u=>/^https:\/\//.test(u)).map(norm);}
+  if(URLS.length)saveUrls();
 }
 function saveUrls(){localStorage.setItem(LS,JSON.stringify(URLS));}
 function norm(u){return (u||'').trim().replace(/\s+/g,'').replace(/\/+$/,'');}
